@@ -1,10 +1,9 @@
-"""Video frame extraction and chunked binary encoding."""
+"""Video frame extraction and MP4/GIF encoding via ffmpeg."""
 
 from __future__ import annotations
 
-import json
-import math
-import struct
+import subprocess
+import sys
 from pathlib import Path
 
 import cv2
@@ -12,13 +11,8 @@ import numpy as np
 import numpy.typing as npt
 
 from ascii_render_machine.encoder import Encoder
-from ascii_render_machine.types import (
-    ChunkInfo,
-    EncoderConfig,
-    Frame,
-    Manifest,
-    VideoConfig,
-)
+from ascii_render_machine.renderer import render_terminal, render_frame_image
+from ascii_render_machine.types import EncoderConfig, VideoConfig
 
 
 def _extract_frames(
@@ -53,27 +47,12 @@ def _extract_frames(
     return frames
 
 
-def _frame_to_binary(frame: Frame) -> bytes:
-    """Serialize a Frame to the binary chunk format (no flame mask yet)."""
-    cell_bytes = frame.to_bytes()
-    flame_bytes_count = math.ceil(len(frame.cells) / 8)
-    flame_mask = b"\x00" * flame_bytes_count
-    return cell_bytes + flame_mask
-
-
 def process_video_terminal(
     video_path: str,
     config: VideoConfig,
-    render_fn: object,
 ) -> None:
-    """Process video and render each frame to terminal in sequence.
-
-    Args:
-        video_path: Path to the input video file.
-        config: Video processing configuration.
-        render_fn: A callable(Frame) that renders to terminal.
-    """
-    from ascii_render_machine.renderer import render_terminal
+    """Process video and render each frame to terminal in real time."""
+    import time
 
     raw_frames = _extract_frames(video_path, config.fps)
     if not raw_frames:
@@ -86,54 +65,48 @@ def process_video_terminal(
         contrast_exp=config.contrast_exp,
     )
     encoder = Encoder(enc_config)
-
-    import sys
-    import time
-
     frame_delay = 1.0 / config.fps
 
     for _i, rgb in enumerate(raw_frames):
         effective_rows = enc_config.effective_rows(rgb.shape[0], rgb.shape[1])
         ascii_frame = encoder.encode_array(rgb, rows=effective_rows)
-        # Clear screen.
         sys.stdout.write("\033[2J\033[H")
         render_terminal(ascii_frame)
         sys.stdout.flush()
         time.sleep(frame_delay)
 
 
-def process_video_chunks(
+def process_video_file(
     video_path: str,
     config: VideoConfig,
-    output_dir: str,
-) -> Manifest:
-    """Process video and write chunked binary files plus manifest.
+    output_path: str,
+) -> None:
+    """Process video and encode to MP4 or GIF via ffmpeg.
 
-    Args:
-        video_path: Path to the input video file.
-        config: Video processing configuration.
-        output_dir: Directory to write chunk files and manifest.json.
+    Each frame is converted to ASCII art, rendered as an image
+    (black background with colored monospace characters), then
+    piped to ffmpeg for encoding.
 
-    Returns:
-        The generated Manifest.
+    Output format is determined by the file extension (.mp4, .gif, .webm).
     """
-    out_path = Path(output_dir)
-    out_path.mkdir(parents=True, exist_ok=True)
+    out = Path(output_path)
+    suffix = out.suffix.lower()
 
     raw_frames = _extract_frames(video_path, config.fps)
     if not raw_frames:
         raise RuntimeError("No frames extracted from video")
 
-    # Determine effective rows from first frame.
-    first = raw_frames[0]
     enc_config = EncoderConfig(
         cols=config.cols,
         rows=config.rows,
         font_size=config.font_size,
         contrast_exp=config.contrast_exp,
     )
-    effective_rows = enc_config.effective_rows(first.shape[0], first.shape[1])
-    # Lock in rows for consistency.
+    encoder = Encoder(enc_config)
+
+    # Encode first frame to determine output image dimensions.
+    first_rgb = raw_frames[0]
+    effective_rows = enc_config.effective_rows(first_rgb.shape[0], first_rgb.shape[1])
     enc_config = EncoderConfig(
         cols=config.cols,
         rows=effective_rows,
@@ -142,54 +115,60 @@ def process_video_chunks(
     )
     encoder = Encoder(enc_config)
 
-    # Encode all frames.
-    encoded_frames: list[Frame] = []
-    for rgb in raw_frames:
-        encoded_frames.append(encoder.encode_array(rgb, rows=effective_rows))
+    first_ascii = encoder.encode_array(first_rgb, rows=effective_rows)
+    first_img = render_frame_image(first_ascii, font_size=config.font_size)
+    img_w, img_h = first_img.size
 
-    # Compute sizes.
-    cell_count = effective_rows * config.cols
-    flame_byte_count = math.ceil(cell_count / 8)
-    frame_size = cell_count * 4 + flame_byte_count
+    # Ensure even dimensions for video codecs.
+    img_w = img_w if img_w % 2 == 0 else img_w + 1
+    img_h = img_h if img_h % 2 == 0 else img_h + 1
 
-    # Target chunk size.
-    frames_per_chunk = max(1, config.chunk_target_bytes // frame_size)
+    # Build ffmpeg command.
+    ffmpeg_cmd: list[str] = [
+        "ffmpeg", "-y",
+        "-f", "rawvideo",
+        "-pixel_format", "rgb24",
+        "-video_size", f"{img_w}x{img_h}",
+        "-framerate", str(config.fps),
+        "-i", "pipe:0",
+    ]
 
-    # Write chunks.
-    chunks: list[ChunkInfo] = []
-    total = len(encoded_frames)
-    chunk_idx = 0
-    offset = 0
+    if suffix == ".gif":
+        ffmpeg_cmd += ["-vf", f"scale={img_w}:{img_h}:flags=lanczos", str(out)]
+    elif suffix == ".webm":
+        ffmpeg_cmd += ["-c:v", "libvpx-vp9", "-crf", "30", "-b:v", "0", str(out)]
+    else:
+        # Default: MP4 with H.264
+        ffmpeg_cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", str(out)]
 
-    while offset < total:
-        end = min(offset + frames_per_chunk, total)
-        n_frames = end - offset
-        chunk_name = f"chunk_{chunk_idx:03d}.bin"
-
-        buf = bytearray()
-        buf += struct.pack("<H", n_frames)
-        for frame in encoded_frames[offset:end]:
-            buf += _frame_to_binary(frame)
-
-        chunk_path = out_path / chunk_name
-        chunk_path.write_bytes(bytes(buf))
-
-        chunks.append(ChunkInfo(file=chunk_name, frames=n_frames, size=len(buf)))
-        chunk_idx += 1
-        offset = end
-
-    manifest = Manifest(
-        cols=config.cols,
-        rows=effective_rows,
-        fps=config.fps,
-        total_frames=total,
-        chunk_count=len(chunks),
-        frame_size=frame_size,
-        flame_bytes=flame_byte_count,
-        chunks=chunks,
+    proc = subprocess.Popen(
+        ffmpeg_cmd,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
     )
 
-    manifest_path = out_path / "manifest.json"
-    manifest_path.write_text(json.dumps(manifest.to_dict(), indent=2))
+    total = len(raw_frames)
+    for i, rgb in enumerate(raw_frames):
+        ascii_frame = encoder.encode_array(rgb, rows=effective_rows)
+        img = render_frame_image(ascii_frame, font_size=config.font_size)
+        # Resize to exact target dimensions (handles odd pixel counts).
+        if img.size != (img_w, img_h):
+            img = img.resize((img_w, img_h))
+        raw_bytes = np.array(img).tobytes()
+        assert proc.stdin is not None
+        proc.stdin.write(raw_bytes)
+        if (i + 1) % 10 == 0 or i == total - 1:
+            print(f"\r  Encoding frame {i + 1}/{total}", end="", flush=True)
 
-    return manifest
+    assert proc.stdin is not None
+    proc.stdin.close()
+    proc.wait()
+    print()
+
+    if proc.returncode != 0:
+        assert proc.stderr is not None
+        stderr_out = proc.stderr.read().decode(errors="replace")
+        raise RuntimeError(f"ffmpeg failed (exit {proc.returncode}): {stderr_out[:500]}")
+
+    print(f"Wrote {total} frames to {out}")

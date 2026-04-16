@@ -38,7 +38,7 @@ def _build_parser() -> argparse.ArgumentParser:
     video.add_argument("--rows", type=int, default=None, help="Number of character rows (auto if omitted).")
     video.add_argument("--fps", type=int, default=10, help="Target frames per second (default: 10).")
     video.add_argument("--terminal", action="store_true", help="Play ASCII video in the terminal.")
-    video.add_argument("--output-dir", type=str, default=None, help="Write chunked binary output to this directory.")
+    video.add_argument("--output", type=str, default=None, help="Output video file path (.mp4, .gif, or .webm).")
     video.add_argument("--font-size", type=int, default=16, help="Font size for character atlas (default: 16).")
     video.add_argument("--contrast", type=float, default=1.2, help="Contrast exponent (default: 1.2).")
 
@@ -86,17 +86,16 @@ def _run_video(args: argparse.Namespace) -> None:
         contrast_exp=args.contrast,
     )
 
-    if args.output_dir:
-        from ascii_render_machine.video import process_video_chunks
+    if args.output:
+        from ascii_render_machine.video import process_video_file
 
-        manifest = process_video_chunks(str(input_path), config, args.output_dir)
-        print(f"Wrote {manifest.total_frames} frames in {manifest.chunk_count} chunks to {args.output_dir}")
+        process_video_file(str(input_path), config, args.output)
     elif args.terminal:
         from ascii_render_machine.video import process_video_terminal
 
-        process_video_terminal(str(input_path), config, render_fn=render_terminal)
+        process_video_terminal(str(input_path), config)
     else:
-        print("Error: specify --terminal or --output-dir for video mode.", file=sys.stderr)
+        print("Error: specify --terminal or --output for video mode.", file=sys.stderr)
         sys.exit(1)
 
 

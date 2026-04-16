@@ -6,6 +6,8 @@ import json
 import sys
 from typing import TextIO
 
+from PIL import Image, ImageDraw, ImageFont
+
 from ascii_render_machine.types import Frame
 
 
@@ -64,3 +66,34 @@ def render_plain(frame: Frame) -> str:
             row_chars.append(frame.cells[r * frame.cols + c].char)
         lines.append("".join(row_chars))
     return "\n".join(lines)
+
+
+def render_frame_image(frame: Frame, font_size: int = 16) -> Image.Image:
+    """Render a Frame as a PIL Image with colored characters on black background.
+
+    Used for video encoding: each frame becomes one image piped to ffmpeg.
+    """
+    try:
+        font = ImageFont.truetype("Courier", font_size)
+    except OSError:
+        try:
+            font = ImageFont.truetype("DejaVuSansMono.ttf", font_size)
+        except OSError:
+            font = ImageFont.load_default()
+
+    char_w = int(font_size * 0.6)
+    char_h = int(font_size * 1.2)
+
+    img_w = frame.cols * char_w
+    img_h = frame.rows * char_h
+    img = Image.new("RGB", (img_w, img_h), (0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    for r in range(frame.rows):
+        y = r * char_h
+        for c in range(frame.cols):
+            cell = frame.cells[r * frame.cols + c]
+            x = c * char_w
+            draw.text((x, y), cell.char, fill=(cell.r, cell.g, cell.b), font=font)
+
+    return img
