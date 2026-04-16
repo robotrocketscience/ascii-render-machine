@@ -27,7 +27,7 @@ def _build_parser() -> argparse.ArgumentParser:
     photo.add_argument("--rows", type=int, default=None, help="Number of character rows (auto if omitted).")
     photo.add_argument("--terminal", action="store_true", help="Render to terminal with ANSI truecolor.")
     photo.add_argument("--no-color", action="store_true", help="Disable color in terminal output.")
-    photo.add_argument("--output", type=str, default=None, help="Write JSON output to this file path.")
+    photo.add_argument("--output", type=str, default=None, help="Output file path (.png, .jpg, or .json).")
     photo.add_argument("--font-size", type=int, default=16, help="Font size for character atlas (default: 16).")
     photo.add_argument("--contrast", type=float, default=1.2, help="Contrast exponent (default: 1.2).")
 
@@ -62,9 +62,17 @@ def _run_photo(args: argparse.Namespace) -> None:
     frame = encoder.encode_image(img)
 
     if args.output:
+        from ascii_render_machine.renderer import render_frame_image
+
         out_path = Path(args.output)
-        out_path.write_text(render_json(frame))
-        print(f"Wrote JSON to {out_path}")
+        suffix = out_path.suffix.lower()
+        if suffix == ".json":
+            out_path.write_text(render_json(frame))
+            print(f"Wrote JSON to {out_path}")
+        else:
+            img_out = render_frame_image(frame, font_size=args.font_size)
+            img_out.save(str(out_path))
+            print(f"Wrote {img_out.size[0]}x{img_out.size[1]} image to {out_path}")
     elif args.terminal:
         render_terminal(frame, color=not args.no_color)
     else:
