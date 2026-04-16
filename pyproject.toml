@@ -1,0 +1,37 @@
+[project]
+name = "ascii-render-machine"
+version = "0.1.0"
+description = "Convert images and videos to ASCII art using shape-vector 6D matching"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+dependencies = [
+    "Pillow>=10.0",
+    "opencv-python-headless>=4.8",
+    "numpy>=1.24",
+]
+
+[project.scripts]
+ascii-render-machine = "ascii_render_machine.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ascii_render_machine"]
+
+[tool.pyright]
+typeCheckingMode = "strict"
+pythonVersion = "3.11"
+venvPath = "."
+venv = ".venv"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1",
+    "pytest>=7.0",
+]
