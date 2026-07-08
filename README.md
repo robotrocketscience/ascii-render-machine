@@ -2,16 +2,16 @@
 
 Convert images and videos to ASCII art using shape-vector 6D matching, based on the technique described in [ASCII Rendering](https://alexharri.com/blog/ascii-rendering) by Alex Harri.
 
-## How It Works
+## How it works
 
 The algorithm divides each image into a grid of cells. For each cell, it computes a 6-dimensional "shape vector" by measuring average brightness within 6 circular sampling regions arranged in a 2x3 pattern (2 columns, 3 rows, vertically staggered for better coverage).
 
-Every printable ASCII character (32-126) is pre-rendered to a bitmap and sampled identically, producing a lookup table of 6D vectors. For each image cell, the algorithm finds the character whose vector has the minimum Euclidean distance to the cell's vector. The average RGB color of the cell is preserved, enabling full-color output.
+Every printable ASCII character (32-126) is pre-rendered to a bitmap and sampled identically, producing a lookup table of 6D vectors. For each image cell, the algorithm finds the character whose vector has the minimum Euclidean distance to the cell's vector. The average RGB color of the cell is preserved, so the output is full color.
 
 ### Pipeline
 
-1. **Character Atlas** -- Render all printable ASCII characters at a fixed font size. Compute 6D shape vectors. Normalize and apply a contrast exponent to sharpen distinctions.
-2. **Image Sampling** -- Divide the input image into a grid. For each cell, compute the 6D shape vector from the grayscale channel and the average RGB from the color channels.
+1. **Character atlas** -- Render all printable ASCII characters at a fixed font size. Compute 6D shape vectors. Normalize and apply a contrast exponent to sharpen distinctions.
+2. **Image sampling** -- Divide the input image into a grid. For each cell, compute the 6D shape vector from the grayscale channel and the average RGB from the color channels.
 3. **Matching** -- Vectorized nearest-neighbor search in 6D space using expanded Euclidean distance.
 4. **Output** -- Emit as PNG/JPG image, ANSI truecolor terminal text, MP4/GIF video, or JSON.
 
@@ -27,7 +27,7 @@ uv sync
 
 Video output requires [ffmpeg](https://ffmpeg.org/) installed on your system.
 
-## Quick Start
+## Quick start
 
 ```bash
 # Render an image to a PNG
@@ -46,7 +46,7 @@ uv run ascii-render-machine video input.mp4 --cols 60 --fps 8 --output result.gi
 uv run ascii-render-machine video input.mp4 --cols 80 --terminal --fps 10
 ```
 
-## CLI Reference
+## CLI reference
 
 ### `photo` -- Convert a single image
 
@@ -80,7 +80,7 @@ ascii-render-machine video INPUT [OPTIONS]
 | `--font-size N` | 16 | Font size used for the character atlas |
 | `--contrast F` | 1.2 | Contrast exponent |
 
-## Output Formats
+## Output formats
 
 ### Image (photo --output result.png)
 
@@ -109,7 +109,7 @@ Prints ANSI truecolor (24-bit) text directly to the terminal. For video, clears 
 
 ## Development
 
-### Type Checking
+### Type checking
 
 The project uses pyright in strict mode:
 
@@ -123,7 +123,7 @@ uv run pyright
 uv run pytest
 ```
 
-### Generate Sample Image
+### Generate the sample image
 
 ```bash
 uv run python examples/generate_sample.py
