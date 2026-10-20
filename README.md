@@ -1,6 +1,6 @@
 # ASCII Render Machine
 
-ascii-render-machine converts images and videos to full-color ASCII art by matching each cell of the input to the printable ASCII character with the closest 6D shape vector. The technique comes from [ASCII Rendering](https://alexharri.com/blog/ascii-rendering) by Alex Harri.
+ascii-render-machine converts images and videos to full-color ASCII art using the method from [ASCII Rendering](https://alexharri.com/blog/ascii-rendering) by Alex Harri.
 
 ## Installation
 
@@ -12,7 +12,7 @@ cd ascii-render-machine
 uv sync
 ```
 
-Video output also requires [ffmpeg](https://ffmpeg.org/) on your system.
+Video output also requires [ffmpeg](https://ffmpeg.org/) installed on your system.
 
 ## Quick start
 
@@ -35,20 +35,15 @@ uv run ascii-render-machine video input.mp4 --cols 80 --terminal --fps 10
 
 ## Algorithm
 
-The renderer divides the image into a grid of cells. For each cell it computes a 6-dimensional shape vector: the average brightness inside 6 circular sampling regions laid out in a 2x3 pattern (2 columns, 3 rows), with the regions vertically staggered for better coverage.
+A 6D shape vector holds the average grayscale brightness of 6 vertically staggered circular regions in 2 columns and 3 rows.
 
-Every printable ASCII character (32-126) is pre-rendered to a bitmap and sampled the same way, which gives a lookup table of 6D vectors. Each cell gets the character whose vector has the smallest Euclidean distance to the cell's vector. The cell keeps its average RGB color, so the output is in full color.
+The character atlas holds the shape vector of each printable ASCII character (32-126), rendered to a bitmap at a fixed font size. The atlas vectors are normalized and raised to a contrast exponent to sharpen character differences.
 
-The pipeline runs in this order:
-
-1. Build the character atlas. Render all printable ASCII characters at a fixed font size, compute their 6D shape vectors, then normalize the vectors and apply a contrast exponent to sharpen the differences between characters.
-2. Sample the image. Divide the input into a grid and compute each cell's 6D shape vector from the grayscale channel and its average RGB from the color channels.
-3. Match. Run a vectorized nearest-neighbor search in 6D space using expanded Euclidean distance.
-4. Write the output as an image (PNG, JPG, or another format Pillow writes), ANSI truecolor terminal text, video (MP4, GIF, or WebM), or JSON.
+Each cell of the input grid gets a shape vector and an average RGB color. A vectorized search by expanded Euclidean distance finds the nearest atlas character for each cell. The output draws that character in the cell's color.
 
 ## CLI reference
 
-### Convert a single image with `photo`
+### `photo` command
 
 ```
 ascii-render-machine photo INPUT [OPTIONS]
@@ -64,7 +59,7 @@ ascii-render-machine photo INPUT [OPTIONS]
 | `--font-size N` | 16 | Font size used for the character atlas and image rendering |
 | `--contrast F` | 1.2 | Contrast exponent for shape vector enhancement |
 
-### Convert a video with `video`
+### `video` command
 
 ```
 ascii-render-machine video INPUT [OPTIONS]
@@ -84,15 +79,15 @@ ascii-render-machine video INPUT [OPTIONS]
 
 ### Image (photo --output result.png)
 
-Draws the ASCII art as colored monospace characters on a black background. Any format Pillow can write works (PNG, JPG, BMP, TIFF, etc.).
+Colored monospace characters are drawn on a black background and saved in any format Pillow writes (PNG, JPG, BMP, TIFF, etc.).
 
 ### Video (video --output result.mp4)
 
-Converts each frame to ASCII art, renders it as an image, and pipes it to ffmpeg for encoding. Supports MP4 (H.264), GIF, and WebM (VP9).
+Each frame is rendered as an ASCII image, and ffmpeg encodes the frames as MP4 (H.264), GIF, or WebM (VP9).
 
 ### Terminal (--terminal)
 
-Prints ANSI truecolor (24-bit) text directly to the terminal. For video, the screen is cleared between frames for real-time playback.
+Terminal output is ANSI truecolor (24-bit) text. For video, the screen clears between frames for real-time playback.
 
 ### JSON (photo --output result.json)
 
@@ -129,9 +124,9 @@ uv run python examples/generate_sample.py
 
 ## Dependencies
 
-- [Pillow](https://pillow.readthedocs.io/) for image loading, character bitmap rendering, and image output
+- [Pillow](https://pillow.readthedocs.io/) for image I/O and character bitmaps
 - [opencv-python-headless](https://github.com/opencv/opencv-python) for video frame extraction
-- [NumPy](https://numpy.org/) for vectorized shape vector computation and matching
+- [NumPy](https://numpy.org/) for vectorized math and matching
 - [ffmpeg](https://ffmpeg.org/) for video encoding (system dependency, needed only for video output)
 
 ## License
