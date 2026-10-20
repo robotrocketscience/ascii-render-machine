@@ -44,7 +44,7 @@ The pipeline runs in this order:
 1. Build the character atlas. Render all printable ASCII characters at a fixed font size, compute their 6D shape vectors, then normalize the vectors and apply a contrast exponent to sharpen the differences between characters.
 2. Sample the image. Divide the input into a grid and compute each cell's 6D shape vector from the grayscale channel and its average RGB from the color channels.
 3. Match. Run a vectorized nearest-neighbor search in 6D space using expanded Euclidean distance.
-4. Write the output as a PNG/JPG image, ANSI truecolor terminal text, MP4/GIF video, or JSON.
+4. Write the output as an image (PNG, JPG, or another format Pillow writes), ANSI truecolor terminal text, video (MP4, GIF, or WebM), or JSON.
 
 ## CLI reference
 
